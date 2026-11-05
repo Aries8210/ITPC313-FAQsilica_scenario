@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/proposal-status-changed.json",
+  "title": "ProposalStatusChanged",
+  "type": "object",
+  "required": [
+    "eventId",
+    "proposalId",
+    "organizationId",
+    "newStatus",
+    "changedAt",
+    "actorId"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "proposalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "oldStatus": {
+      "oneOf": [
+        {
+          "enum": [
+            "SUBMITTED",
+            "ADVISER_OK",
+            "SASO_OK",
+            "APPROVED",
+            "RETURNED",
+            "REJECTED_BUDGET",
+            "RELEASED",
+            "LIQUIDATED"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "newStatus": {
+      "enum": [
+        "SUBMITTED",
+        "ADVISER_OK",
+        "SASO_OK",
+        "APPROVED",
+        "RETURNED",
+        "REJECTED_BUDGET",
+        "RELEASED",
+        "LIQUIDATED"
+      ]
+    },
+    "changedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actorId": {
+      "type": "string"
+    }
+  },
+  "description": "Published by AAWS on routing key proposal.status-changed; consumed by Notification."
+}

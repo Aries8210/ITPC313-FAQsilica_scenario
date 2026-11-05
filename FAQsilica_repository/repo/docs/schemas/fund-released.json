@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/fund-released.json",
+  "title": "FundReleased",
+  "type": "object",
+  "required": [
+    "eventId",
+    "disbursementId",
+    "proposalId",
+    "organizationId",
+    "amount",
+    "releasedAt",
+    "releasedBy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "disbursementId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "proposalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "PHP centavos"
+    },
+    "releasedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "releasedBy": {
+      "type": "string"
+    }
+  },
+  "description": "Published by FBS on routing key fund.released; consumed by AAWS and Notification."
+}

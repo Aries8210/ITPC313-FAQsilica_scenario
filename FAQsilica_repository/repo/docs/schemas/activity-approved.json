@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/activity-approved.json",
+  "title": "ActivityApproved",
+  "type": "object",
+  "required": [
+    "eventId",
+    "proposalId",
+    "organizationId",
+    "approvedAmount",
+    "approvedAt",
+    "approvedBy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "proposalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "approvedAmount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "PHP centavos"
+    },
+    "approvedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "approvedBy": {
+      "type": "string",
+      "description": "User ID of the final approver"
+    }
+  },
+  "description": "Published by AAWS on routing key activity.approved; consumed by FBS and Notification."
+}

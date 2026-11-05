@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/organization.json",
+  "title": "Organization",
+  "type": "object",
+  "required": [
+    "organizationId",
+    "name",
+    "accreditationStatus"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string"
+    },
+    "accreditationStatus": {
+      "enum": [
+        "ACTIVE",
+        "LAPSED"
+      ]
+    },
+    "adviserName": {
+      "type": "string"
+    }
+  },
+  "description": "Canonical entity."
+}

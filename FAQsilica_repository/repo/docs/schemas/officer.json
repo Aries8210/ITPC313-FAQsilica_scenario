@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/officer.json",
+  "title": "Officer",
+  "type": "object",
+  "required": [
+    "studentId",
+    "organizationId",
+    "role"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "studentId": {
+      "type": "string"
+    },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "role": {
+      "type": "string"
+    }
+  },
+  "description": "Canonical entity."
+}

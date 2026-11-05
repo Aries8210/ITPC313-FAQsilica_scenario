@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/disbursement.json",
+  "title": "Disbursement",
+  "type": "object",
+  "required": [
+    "disbursementId",
+    "proposalId",
+    "amount",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "disbursementId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "proposalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "PHP centavos"
+    },
+    "status": {
+      "enum": [
+        "REQUESTED",
+        "RELEASED"
+      ]
+    }
+  },
+  "description": "Canonical entity."
+}

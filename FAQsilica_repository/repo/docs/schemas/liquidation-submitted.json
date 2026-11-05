@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/liquidation-submitted.json",
+  "title": "LiquidationSubmitted",
+  "type": "object",
+  "required": [
+    "eventId",
+    "liquidationId",
+    "proposalId",
+    "status",
+    "submittedAt"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "liquidationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "proposalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "status": {
+      "enum": [
+        "PENDING",
+        "LIQUIDATED"
+      ]
+    },
+    "submittedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "description": "Published by FBS on routing key liquidation.submitted; consumed by AAWS and Notification."
+}

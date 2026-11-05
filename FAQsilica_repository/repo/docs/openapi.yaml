@@ -1,0 +1,641 @@
+openapi: 3.1.0
+info:
+  title: Student Organization Activity Approval and Fund Release API
+  version: 0.1.0-draft
+  summary: Draft REST contracts for the ITPC 313 prefinal proposal (Team FAQsilica).
+  description: |
+    Draft contract for the integrated platform that connects the Student Organization
+    Registry System (SORS), the Activity Approval Workflow System (AAWS), the Finance and
+    Budget System (FBS), and a mocked Student Information System (SIS).
+
+    All paths sit behind the API gateway under the base path `/api/v1`. Every call except
+    `POST /auth/token` carries a JWT bearer token. Money is an integer in PHP centavos and
+    all timestamps are ISO 8601 in UTC. Only synthetic data is used.
+
+    Events (ActivityApproved, FundReleased, LiquidationSubmitted, ProposalStatusChanged)
+    are published through the RabbitMQ topic exchange `campus.events`; their JSON Schemas
+    are in `docs/schemas/`.
+
+    The seven roles are officer, adviser, saso, dean, finance, cashier, and admin. Read
+    access to the audit history is held by the admin role (acting as auditor).
+  license:
+    name: Course project, not for production
+    identifier: UNLICENSED
+servers:
+  - url: https://localhost:8443/api/v1
+    description: Local Docker Compose gateway (self-signed certificate)
+tags:
+  - name: Auth
+    description: Mocked identity provider that issues tokens
+  - name: Registry
+    description: SORS, the master record of organizations and officers
+  - name: Student information
+    description: SIS (mocked), enrollment lookup
+  - name: Approval
+    description: AAWS, proposals and approval decisions
+  - name: Finance
+    description: FBS, fund balances, disbursements, and liquidation
+security:
+  - bearerAuth: []
+paths:
+  /auth/token:
+    post:
+      tags: [Auth]
+      operationId: issueToken
+      summary: Issue a short-lived JWT with the caller's role
+      description: Mocked identity provider. The token expires after 15 minutes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /organizations/{orgId}:
+    get:
+      tags: [Registry]
+      operationId: getOrganization
+      summary: Get organization name, adviser, and accreditation status
+      description: Provider SORS, consumer AAWS. Officers may read only their own organization.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: The organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /organizations/{orgId}/officers/{studentId}/eligibility:
+    get:
+      tags: [Registry]
+      operationId: checkOfficerEligibility
+      summary: Check that the student is an active officer of the organization
+      description: Returns true or false only, not the full officer list (data minimization).
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Eligibility result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibilityResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /students/{studentId}/status:
+    get:
+      tags: [Student information]
+      operationId: getStudentStatus
+      summary: Check enrollment and good standing
+      description: Provider SIS (mocked), consumer AAWS. Returns the status value only.
+      parameters:
+        - $ref: '#/components/parameters/StudentId'
+      responses:
+        '200':
+          description: Enrollment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /proposals:
+    post:
+      tags: [Approval]
+      operationId: submitProposal
+      summary: Submit an activity proposal with its budget request
+      description: |
+        Role officer. AAWS checks the organization and officer with SORS and SIS and the
+        budget with FBS. A request above the available balance is rejected at submission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposalCreate'
+      responses:
+        '201':
+          description: Proposal accepted and routed to the first approver
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Request exceeds the available balance or the officer is not eligible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /proposals/{proposalId}:
+    get:
+      tags: [Approval]
+      operationId: getProposal
+      summary: Read the current status of a proposal
+      description: Roles officer (own organization only), adviser, saso, dean, finance, admin.
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+      responses:
+        '200':
+          description: The proposal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /proposals/{proposalId}/decisions:
+    post:
+      tags: [Approval]
+      operationId: decideProposal
+      summary: Approve or return a proposal at the current stage
+      description: |
+        Only the approver for the current stage (adviser, then saso, then dean) may decide.
+        The dean's approval is final and makes AAWS publish ActivityApproved.
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The proposal is not at this approver's stage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /proposals/{proposalId}/history:
+    get:
+      tags: [Approval]
+      operationId: getProposalHistory
+      summary: Read every state change with actor and time
+      description: Role admin (acting as auditor).
+      parameters:
+        - $ref: '#/components/parameters/ProposalId'
+      responses:
+        '200':
+          description: The audit history, oldest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposalHistory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /funds/{orgId}/balance:
+    get:
+      tags: [Finance]
+      operationId: getFundBalance
+      summary: Get the organization's available balance for the budget check
+      description: Provider FBS, consumer AAWS. The balance excludes amounts already set aside.
+      parameters:
+        - $ref: '#/components/parameters/OrgId'
+      responses:
+        '200':
+          description: The available balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FundBalance'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /disbursements/{disbursementId}:
+    get:
+      tags: [Finance]
+      operationId: getDisbursement
+      summary: Read the disbursement request and its status
+      description: FBS creates the request when it consumes ActivityApproved.
+      parameters:
+        - $ref: '#/components/parameters/DisbursementId'
+      responses:
+        '200':
+          description: The disbursement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /disbursements/{disbursementId}/release:
+    post:
+      tags: [Finance]
+      operationId: releaseDisbursement
+      summary: Confirm that funds were released
+      description: Role cashier (mocked in the prototype). FBS then publishes FundReleased.
+      parameters:
+        - $ref: '#/components/parameters/DisbursementId'
+      responses:
+        '200':
+          description: Funds marked as released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disbursement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The disbursement is already released
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /liquidations:
+    post:
+      tags: [Finance]
+      operationId: submitLiquidation
+      summary: Submit liquidation for a released activity
+      description: Role officer. FBS publishes LiquidationSubmitted and AAWS closes the proposal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LiquidationCreate'
+      responses:
+        '201':
+          description: Liquidation recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Liquidation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Signed JWT carrying the user ID, role, and organization ID (officers).
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    StudentId:
+      name: studentId
+      in: path
+      required: true
+      description: Student ID, trimmed and uppercase.
+      schema:
+        type: string
+        minLength: 1
+    ProposalId:
+      name: proposalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DisbursementId:
+      name: disbursementId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    BadRequest:
+      description: The request body or parameters are invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, expired, or tampered token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The role or organization is not allowed for this action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The record does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Role:
+      type: string
+      enum: [officer, adviser, saso, dean, finance, cashier, admin]
+    Money:
+      type: integer
+      minimum: 0
+      description: Amount in PHP centavos.
+    ProposalStatus:
+      type: string
+      description: Canonical status names.
+      enum: [SUBMITTED, ADVISER_OK, SASO_OK, APPROVED, RETURNED, REJECTED_BUDGET, RELEASED, LIQUIDATED]
+    TokenRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, secret]
+      properties:
+        userId:
+          type: string
+        secret:
+          type: string
+          writeOnly: true
+    TokenResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn, role]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          description: Lifetime in seconds.
+          examples: [900]
+        role:
+          $ref: '#/components/schemas/Role'
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [organizationId, name, accreditationStatus]
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        adviserName:
+          type: string
+        accreditationStatus:
+          type: string
+          enum: [ACTIVE, LAPSED]
+    EligibilityResult:
+      type: object
+      additionalProperties: false
+      required: [organizationId, studentId, eligible]
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+        studentId:
+          type: string
+        eligible:
+          type: boolean
+    StudentStatus:
+      type: object
+      additionalProperties: false
+      required: [studentId, enrollmentStatus, goodStanding]
+      properties:
+        studentId:
+          type: string
+        enrollmentStatus:
+          type: string
+          enum: [ENROLLED, NOT_ENROLLED]
+        goodStanding:
+          type: boolean
+    ProposalCreate:
+      type: object
+      additionalProperties: false
+      required: [organizationId, title, activityDate, requestedAmount]
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+        activityDate:
+          type: string
+          format: date
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+    Proposal:
+      type: object
+      additionalProperties: false
+      required: [proposalId, organizationId, title, activityDate, requestedAmount, status, createdAt]
+      properties:
+        proposalId:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        activityDate:
+          type: string
+          format: date
+        requestedAmount:
+          $ref: '#/components/schemas/Money'
+        status:
+          $ref: '#/components/schemas/ProposalStatus'
+        createdAt:
+          type: string
+          format: date-time
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, RETURN]
+        remarks:
+          type: string
+          maxLength: 500
+    DecisionResult:
+      type: object
+      additionalProperties: false
+      required: [proposalId, status, decidedBy, decidedAt]
+      properties:
+        proposalId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ProposalStatus'
+        decidedBy:
+          type: string
+          description: User ID of the approver.
+        decidedAt:
+          type: string
+          format: date-time
+    ProposalHistory:
+      type: object
+      additionalProperties: false
+      required: [proposalId, entries]
+      properties:
+        proposalId:
+          type: string
+          format: uuid
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryEntry'
+    HistoryEntry:
+      type: object
+      additionalProperties: false
+      required: [oldStatus, newStatus, actorId, changedAt]
+      properties:
+        oldStatus:
+          oneOf:
+            - $ref: '#/components/schemas/ProposalStatus'
+            - type: 'null'
+        newStatus:
+          $ref: '#/components/schemas/ProposalStatus'
+        actorId:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+    FundBalance:
+      type: object
+      additionalProperties: false
+      required: [organizationId, availableAmount]
+      properties:
+        organizationId:
+          type: string
+          format: uuid
+        availableAmount:
+          $ref: '#/components/schemas/Money'
+    Disbursement:
+      type: object
+      additionalProperties: false
+      required: [disbursementId, proposalId, organizationId, amount, status, createdAt]
+      properties:
+        disbursementId:
+          type: string
+          format: uuid
+        proposalId:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        amount:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [REQUESTED, RELEASED]
+        createdAt:
+          type: string
+          format: date-time
+        releasedAt:
+          type: string
+          format: date-time
+    LiquidationCreate:
+      type: object
+      additionalProperties: false
+      required: [proposalId, totalSpent]
+      properties:
+        proposalId:
+          type: string
+          format: uuid
+        totalSpent:
+          $ref: '#/components/schemas/Money'
+    Liquidation:
+      type: object
+      additionalProperties: false
+      required: [liquidationId, proposalId, status, submittedAt]
+      properties:
+        liquidationId:
+          type: string
+          format: uuid
+        proposalId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, LIQUIDATED]
+        submittedAt:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          examples: [FORBIDDEN]
+        message:
+          type: string

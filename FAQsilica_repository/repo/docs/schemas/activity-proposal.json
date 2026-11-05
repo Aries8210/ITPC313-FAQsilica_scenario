@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://faqsilica.example/schemas/activity-proposal.json",
+  "title": "ActivityProposal",
+  "type": "object",
+  "required": [
+    "proposalId",
+    "organizationId",
+    "title",
+    "activityDate",
+    "requestedAmount",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "proposalId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "organizationId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "title": {
+      "type": "string"
+    },
+    "activityDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "requestedAmount": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "PHP centavos"
+    },
+    "status": {
+      "enum": [
+        "SUBMITTED",
+        "ADVISER_OK",
+        "SASO_OK",
+        "APPROVED",
+        "RETURNED",
+        "REJECTED_BUDGET",
+        "RELEASED",
+        "LIQUIDATED"
+      ]
+    }
+  },
+  "description": "Canonical entity."
+}
